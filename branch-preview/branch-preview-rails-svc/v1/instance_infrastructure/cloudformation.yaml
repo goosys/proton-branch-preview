@@ -81,6 +81,26 @@ Resources:
             Environment:
               - Name: APP_HOST
                 Value: !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+          - Name: db
+            Image: public.ecr.aws/ubuntu/mysql:latest
+            Essential: true
+            LogConfiguration:
+              LogDriver: 'awslogs'
+              Options:
+                awslogs-group: '{{service.name}}/{{service_instance.name}}'
+                awslogs-region: !Ref 'AWS::Region'
+                awslogs-stream-prefix: '{{service.name}}/{{service_instance.name}}'
+            Environment:
+              - Name: MYSQL_ROOT_PASSWORD
+                Value: root
+              - Name: MYSQL_DATABASE
+                Value: project_development
+              - Name: MYSQL_USER
+                Value: mysql
+              - Name: MYSQL_PASSWORD
+                Value: mysql
+              - Name: TZ
+                Value: 'Asia/Tokyo'
         - - Name: web
             Image: !FindInMap ['ServiceConfig', 'Maintenance', 'Image']
             Essential: true
@@ -154,7 +174,7 @@ Resources:
       HealthCheckIntervalSeconds: 30
       HealthCheckPath: !If
         - inService
-        - /health
+        - /
         - /
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 6
