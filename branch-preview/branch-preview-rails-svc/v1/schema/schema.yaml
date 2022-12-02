@@ -1,0 +1,55 @@
+schema:
+  format:
+    openapi: "3.0.0"
+  service_input_type: "LoadBalancedServiceInput"
+  pipeline_input_type: "PipelineInputs"
+
+  types:
+    LoadBalancedServiceInput:
+      type: object
+      description: "Input properties for a loadbalanced Fargate service"
+      properties:
+        service_domain:
+          type: string
+          description: "The service domain name"
+          minLength: 0
+          maxLength: 100
+        task_size:
+          type: string
+          description: "The size of the task you want to run"
+          enum: ["small", "medium", "large"]
+          default: "small"
+        image:
+          type: string
+          description: "Do NOT modify manually"
+          default: ""
+          minLength: 0
+          maxLength: 200
+        in_maintenance:
+          type: string
+          description: "The nginx container launch In Maintenance mode"
+          enum: ["Yes", "No"]
+          default: "Yes"
+
+    PipelineInputs:
+      type: object
+      description: "Pipeline input properties"
+      properties:
+        dockerfile:
+          type: string
+          description: "The location of the Dockerfile to build"
+          default: "deploy/Dockerfile.production"
+          minLength: 1
+          maxLength: 100
+        unit_test_command:
+          type: string
+          description: "The command to run to unit test the application code"
+          default: "echo 'add your unit test command here'"
+          minLength: 1
+          maxLength: 200
+        notification_chatbot_arn:
+          type: string
+          description: "The Chatbot Arn to notify to slack on each pipeline events"
+          default: ""
+          minLength: 0
+          maxLength: 200
