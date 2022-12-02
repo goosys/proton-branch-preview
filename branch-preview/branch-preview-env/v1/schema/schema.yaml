@@ -1,0 +1,29 @@
+schema:
+  format:
+    openapi: "3.0.0"
+  environment_input_type: "PublicEnvironmentInput"
+  types:
+    PublicEnvironmentInput:
+      type: object
+      description: "Input properties for my environment"
+      properties:
+        project_base_name:
+          type: string
+          description: "Project Base Name"
+          pattern: ([a-z]{3,10})
+          default: sample
+        project_short_name:
+          type: string
+          description: "Project Name"
+          pattern: ([a-z]{3,10})
+          default: sample
+        service_certificate_arn:
+          type: string
+          description: "Certificate Manager Arn"
+          default: ""
+          minLength: 4
+        container_insights:
+          type: string
+          enum: ["enabled", "disabled"]
+          default: "disabled"
+

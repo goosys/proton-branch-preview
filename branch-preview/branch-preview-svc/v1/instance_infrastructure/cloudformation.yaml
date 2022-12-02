@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy a service on AWS Fargate, hosted in a public subnet, and accessible via a public load balancer.
+Mappings:
+  EnvironmentNameConfig:
+    Environment:
+      Name: '{{environment.name}}'
+  TaskSize:
+    small:
+      cpu: 512
+      memory: 1024
+    medium:
+      cpu: 1024
+      memory: 2048
+    large:
+      cpu: 2048
+      memory: 4092
+  ResourceTagConfig:
+    Project:
+      Key: '{{environment.outputs.CostProjectTagKey}}'
+      Value: '{{environment.outputs.CostProjectTagValue}}'
+    Service:
+      Key: '{{environment.outputs.CostServiceTagKey}}'
+      Value: '{{environment.outputs.CostServiceTagValue}}'
+    Env:
+      Key: '{{environment.outputs.CostEnvTagKey}}'
+      Value: '{{environment.outputs.CostEnvTagValue}}'
+  ServiceConfig:
+    Maintenance:
+      Image: 'public.ecr.aws/z9d2n7e1/nginx:1.21.0'
+    DomainName:
+      Value: '{{service_instance.inputs.service_domain}}'
+    DesiredCount:
+      Value: 1
+    Port:
+      Value: 80
+
+Conditions:
+  inMaintence: !Equals 
+    - '{{service_instance.inputs.in_maintenance}}'
+    - 'Yes'
+  inService: !Equals 
+    - '{{service_instance.inputs.in_maintenance}}'
+    - 'No'
+
+Resources:
+
+  # A log group for storing the stdout logs from this service's containers
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '{{service.name}}/{{service_instance.name}}'
+
+  # The task definition. This is a simple metadata description of what
+  # container to run, and what resource requirements it has.
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: '{{service.name}}_{{service_instance.name}}'
+      Cpu: !FindInMap [TaskSize, {{service_instance.inputs.task_size}}, cpu]
+      Memory: !FindInMap [TaskSize, {{service_instance.inputs.task_size}}, memory]
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: '{{environment.outputs.ECSTaskExecutionRole}}'
+      TaskRoleArn: !Ref ECSTaskRole
+      ContainerDefinitions: !If
+        - inService
+        - - Name: web
+            Image: !FindInMap ['ServiceConfig', 'Maintenance', 'Image']
+            Essential: true
+            LogConfiguration:
+              LogDriver: 'awslogs'
+              Options:
+                awslogs-group: '{{service.name}}/{{service_instance.name}}'
+                awslogs-region: !Ref 'AWS::Region'
+                awslogs-stream-prefix: '{{service.name}}/{{service_instance.name}}'
+            PortMappings:
+              - ContainerPort: !FindInMap ['ServiceConfig', 'Port', 'Value']
+            LinuxParameters:
+                InitProcessEnabled: true
+            Environment:
+              - Name: APP_HOST
+                Value: !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+        - - Name: web
+            Image: !FindInMap ['ServiceConfig', 'Maintenance', 'Image']
+            Essential: true
+            LogConfiguration:
+              LogDriver: 'awslogs'
+              Options:
+                awslogs-group: '{{service.name}}/{{service_instance.name}}'
+                awslogs-region: !Ref 'AWS::Region'
+                awslogs-stream-prefix: '{{service.name}}/{{service_instance.name}}'
+            PortMappings:
+              - ContainerPort: !FindInMap ['ServiceConfig', 'Port', 'Value']
+            LinuxParameters:
+                InitProcessEnabled: true
+            Environment:
+              - Name: APP_HOST
+                Value: !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+      Tags:
+        - Key: Name
+          Value: !FindInMap ['EnvironmentNameConfig', 'Environment', 'Name']
+        - Key: !FindInMap ['ResourceTagConfig', 'Project', 'Key']
+          Value: !FindInMap ['ResourceTagConfig', 'Project', 'Value']
+        - Key: !FindInMap ['ResourceTagConfig', 'Service', 'Key']
+          Value: !FindInMap ['ResourceTagConfig', 'Service', 'Value']
+        - Key: !FindInMap ['ResourceTagConfig', 'Env', 'Key']
+          Value: !FindInMap ['ResourceTagConfig', 'Env', 'Value']
+
+  # The service_instance.inputs. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: LoadBalancerRule
+    Properties:
+      ServiceName: '{{service.name}}_{{service_instance.name}}'
+      Cluster: '{{environment.outputs.ClusterName}}'
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: !FindInMap ['ServiceConfig', 'DesiredCount', 'Value']
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - '{{environment.outputs.ContainerSecurityGroup}}'
+            - '{{environment.outputs.VpcDefaultSecurityGroup}}'
+          Subnets:
+            - '{{environment.outputs.PublicSubnetOne}}'
+            - '{{environment.outputs.PublicSubnetTwo}}'
+      TaskDefinition: !Ref 'TaskDefinition'
+      LoadBalancers:
+        - ContainerName: 'web'
+          ContainerPort: !FindInMap ['ServiceConfig', 'Port', 'Value']
+          TargetGroupArn: !Ref 'TargetGroup'
+      PropagateTags: TASK_DEFINITION
+      Tags:
+        - Key: Name
+          Value: !FindInMap ['EnvironmentNameConfig', 'Environment', 'Name']
+
+  # A target group. This is used for keeping track of all the tasks, and
+  # what IP addresses / port numbers they have. You can query it yourself,
+  # to use the addresses yourself, but most often this target group is just
+  # connected to an application load balancer, or network load balancer, so
+  # it can automatically distribute traffic across all the targets.
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: !If
+        - inService
+        - /health
+        - /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 6
+      HealthyThresholdCount: 2
+      TargetType: ip
+      # Note that the Name property has a 32 character limit, which could be
+      # reached by using either {{service.name}}, {{service_instance.name}}
+      # or a combination of both as we're doing here, so we truncate the name to 29 characters
+      # plus an ellipsis different from '...' or '---' to avoid running into errors.
+      Name: '{{(service.name~"--"~service_instance.name)|truncate(29, true, 'zzz', 0)}}'
+      Port: !FindInMap ['ServiceConfig', 'Port', 'Value']
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: '{{environment.outputs.VpcId}}'
+      Tags:
+        - Key: Name
+          Value: !FindInMap ['EnvironmentNameConfig', 'Environment', 'Name']
+
+  # Create a rule on the load balancer for routing traffic to the target group
+  LoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref 'TargetGroup'
+          Type: 'forward'
+      Conditions:
+        - Field: host-header
+          Values:
+            - !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+      ListenerArn: '{{environment.outputs.PublicLoadBalancerHttpsListener}}'
+      Priority: 1
+
+  # This is a role which is used by the ECS tasks themselves.
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonSesSendingAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "ses:SendRawEmail"
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !FindInMap ['EnvironmentNameConfig', 'Environment', 'Name']
+
+# Outputs:
