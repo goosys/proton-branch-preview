@@ -66,7 +66,7 @@ Resources:
       ContainerDefinitions: !If
         - inService
         - - Name: web
-            Image: !FindInMap ['ServiceConfig', 'Maintenance', 'Image']
+            Image: '{{service_instance.inputs.image}}'
             Essential: true
             LogConfiguration:
               LogDriver: 'awslogs'
@@ -79,10 +79,24 @@ Resources:
             LinuxParameters:
                 InitProcessEnabled: true
             Environment:
+              - Name: VPC_CIDR
+                Value: '{{environment.outputs.VpcCIDR}}'
               - Name: APP_HOST
                 Value: !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+              - Name: DATABASE_HOST
+                Value: 127.0.0.1
+              - Name: DATABASE_PORT
+                Value: 3306
+              - Name: DATABASE_USER
+                Value: mariadb
+              - Name: DATABASE_PASS
+                Value: mariadb
+              - Name: DATABASE_URL
+                Value: mysql2://mariadb:mariadb@127.0.0.1:3306/project_development
+              - Name: PORT
+                Value: !FindInMap ['ServiceConfig', 'Port', 'Value']
           - Name: db
-            Image: public.ecr.aws/ubuntu/mysql:latest
+            Image: docker.io/bitnami/mariadb:10.6
             Essential: true
             LogConfiguration:
               LogDriver: 'awslogs'
@@ -91,14 +105,16 @@ Resources:
                 awslogs-region: !Ref 'AWS::Region'
                 awslogs-stream-prefix: '{{service.name}}/{{service_instance.name}}'
             Environment:
-              - Name: MYSQL_ROOT_PASSWORD
+              - Name: ALLOW_EMPTY_PASSWORD
+                Value: 'yes'
+              - Name: MARIADB_ROOT_PASSWORD
                 Value: root
-              - Name: MYSQL_DATABASE
+              - Name: MARIADB_DATABASE
                 Value: project_development
-              - Name: MYSQL_USER
-                Value: mysql
-              - Name: MYSQL_PASSWORD
-                Value: mysql
+              - Name: MARIADB_USER
+                Value: mariadb
+              - Name: MARIADB_PASSWORD
+                Value: mariadb
               - Name: TZ
                 Value: 'Asia/Tokyo'
         - - Name: web
@@ -144,6 +160,7 @@ Resources:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
       DesiredCount: !FindInMap ['ServiceConfig', 'DesiredCount', 'Value']
+      HealthCheckGracePeriodSeconds: 180
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED

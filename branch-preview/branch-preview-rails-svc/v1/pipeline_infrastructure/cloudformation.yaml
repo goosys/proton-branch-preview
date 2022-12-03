@@ -42,6 +42,12 @@ Resources:
         - Name: REPOSITORY_NAME
           Type: PLAINTEXT
           Value: !Ref ECRRepo
+        - Name: REPOSITORY_URI
+          Type: PLAINTEXT
+          Value:
+            Fn::GetAtt:
+              - ECRRepo
+              - RepositoryUri
         - Name: service_name
           Type: PLAINTEXT
           Value: '{{service.name}}'
