@@ -310,5 +310,11 @@ Outputs:
     Value: !Sub "http://${PublicLoadBalancer.DNSName}"
   PublicLoadBalancer:
     Value: !Ref PublicLoadBalancer
+  PublicLoadBalancerDNSName:
+    Value: !GetAtt 'PublicLoadBalancer.DNSName'
+  PublicLoadBalancerCanonicalHostedZoneID:
+    Value: !GetAtt 'PublicLoadBalancer.CanonicalHostedZoneID'
   PublicLoadBalancerHttpsListener:
     Value: !Ref PublicLoadBalancerHttpsListener
+  HostedZoneID:
+    Value: '{{ environment.inputs.hosted_zone_id }}'

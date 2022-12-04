@@ -22,6 +22,10 @@ schema:
           description: "Certificate Manager Arn"
           default: ""
           minLength: 4
+        hosted_zone_id:
+          type: string
+          description: "Hosted Zone ID"
+          default: ""
         container_insights:
           type: string
           enum: ["enabled", "disabled"]

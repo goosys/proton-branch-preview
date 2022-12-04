@@ -247,4 +247,15 @@ Resources:
         - Key: Name
           Value: !FindInMap ['EnvironmentNameConfig', 'Environment', 'Name']
 
+  DNSRecord:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: '{{environment.outputs.HostedZoneID}}'
+      RecordSets:
+        - Name: !FindInMap ['ServiceConfig', 'DomainName', 'Value']
+          Type: A
+          AliasTarget:
+            HostedZoneId: '{{environment.outputs.PublicLoadBalancerCanonicalHostedZoneID}}'
+            DNSName: '{{environment.outputs.PublicLoadBalancerDNSName}}'
+
 # Outputs:
