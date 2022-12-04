@@ -14,6 +14,11 @@ schema:
           description: "The service domain name"
           minLength: 0
           maxLength: 100
+        alb_listener_rule_priority:
+          type: number
+          default: 1
+          minimum: 1
+          maximum: 50000
         task_size:
           type: string
           description: "The size of the task you want to run"

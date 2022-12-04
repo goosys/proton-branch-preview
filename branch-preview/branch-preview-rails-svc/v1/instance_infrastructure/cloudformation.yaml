@@ -222,7 +222,7 @@ Resources:
           Values:
             - !FindInMap ['ServiceConfig', 'DomainName', 'Value']
       ListenerArn: '{{environment.outputs.PublicLoadBalancerHttpsListener}}'
-      Priority: 1
+      Priority: {{service_instance.inputs.alb_listener_rule_priority}}
 
   # This is a role which is used by the ECS tasks themselves.
   ECSTaskRole:
